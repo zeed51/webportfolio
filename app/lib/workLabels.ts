@@ -47,5 +47,5 @@ export const WORK_ITEM_LABELS: Record<WorkItemId, Record<Language, string>> = {
     ua: "ДИЗАЙН YOUTUBE-ОБКЛАДИНОК",
     eng: "YOUTUBE THUMBNAIL DESIGN",
   },
-  "amazon-design": { ua: "ДИЗАЙН ДЛЯ AMAZON", eng: "AMAZON DESIGN" },
+    "amazon-design": { ua: "ДИЗАЙН\nДЛЯ AMAZON", eng: "AMAZON DESIGN" },
 };

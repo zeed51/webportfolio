@@ -89,6 +89,9 @@ export const WORK_REELS: Record<string, WorkReels> = {
       "/images/thumbnails/thumbnail-8.webp",
       "/images/thumbnails/thumbnail-9.webp",
       "/images/thumbnails/thumbnail-10.webp",
+      "/images/thumbnails/thumbnail-11.webp",
+      "/images/thumbnails/thumbnail-12.webp",
+      "/images/thumbnails/thumbnail-13.webp",
     ],
   },
     "amazon-design": {

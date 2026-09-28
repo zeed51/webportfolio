@@ -72,7 +72,8 @@ body {
   .frame-safe-bottom {
     height: calc(158px + env(safe-area-inset-bottom, 0px));
   }
-}
+  }
+
 
 @media (max-width: 800px) {
   .frame-vignette {
@@ -887,10 +888,9 @@ body:has(.details-page) {
   }
 
   .details-contact-note {
-    position: absolute;
+    position: static;
 
-    left: 22px;
-    top: 470px;
+    margin-top: 30px;
 
     font-size: 14px;
 
@@ -925,13 +925,22 @@ body:has(.details-page) {
   .details-topbar-bg {
     position: fixed;
 
-    top: -100px;
+    top: 0;
     left: 0;
     right: 0;
 
-    height: calc(160px + env(safe-area-inset-top, 0px));
+    height: calc(80px + env(safe-area-inset-top, 0px));
 
-    background: #171717;
+    background: rgba(23, 23, 23, 0.55);
+
+    -webkit-mask-image: linear-gradient(to bottom, #000 90%, transparent);
+    mask-image: linear-gradient(to bottom, #000 90%, transparent);
+
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+
+    transform: translateZ(0);
+    will-change: backdrop-filter;
 
     z-index: 80;
 
@@ -1001,7 +1010,7 @@ body:has(.details-page) {
 
     gap: 20px 24px;
 
-    padding: 120px 22px 60px;
+    padding: 70px 22px 60px;
   }
 
   .details-education {
@@ -1583,7 +1592,8 @@ body:has(.details-page) {
   color: #f3f1eb;
 }
 
-.works-light .glass-tab-active {
+.works-light .glass-tab-active,
+.glass-tabs-light .glass-tab-active {
   color: #171717;
 }
 
@@ -1595,6 +1605,7 @@ body:has(.details-page) {
   position: relative;
 
   min-height: 100vh;
+  min-height: 100dvh;
 
   background: #171717;
   color: #f3f1eb;
@@ -2405,14 +2416,14 @@ color: #bbff00;
     top: 0;
     right: 0;
 
-    max-width: 160px;
+    max-width: 230px;
 
     font-size: 18px;
 
-    text-align: right;
-    white-space: normal;
+  text-align: right;
+  white-space: pre-line;
 
-    word-break: break-word;
+  word-break: break-word;
   }
 
   .lang-globe-label {
@@ -2592,18 +2603,46 @@ color: #bbff00;
 
   margin: 0 auto;
 
-  padding: 120px 42px 100px;
+  padding: 105px 42px 100px;
 
   display: flex;
   flex-direction: column;
 
   gap: 24px;
+
+  overflow: clip;
 }
 
 .grid-row {
   display: grid;
 
   gap: 24px;
+}
+
+.reel-blur-bar {
+  position: fixed;
+
+  top: 0;
+  left: 0;
+  right: 0;
+
+  height: 107px;
+
+  background: rgba(23, 23, 23, 0.55);
+
+
+  -webkit-mask-image: linear-gradient(to bottom, #000 90%, transparent);
+  mask-image: linear-gradient(to bottom, #000 90%, transparent);
+
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+
+  transform: translateZ(0);
+  will-change: backdrop-filter;
+
+  pointer-events: none;
+
+  z-index: 90;
 }
 
 .grid-item {
@@ -2656,6 +2695,62 @@ color: #bbff00;
   display: block;
 }
 
+.grid-zoom-overlay {
+  overscroll-behavior: contain;
+}
+
+.grid-zoom-track {
+  display: flex;
+
+  width: 100%;
+  height: 100%;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  scroll-snap-type: x mandatory;
+
+  scrollbar-width: none;
+}
+
+.grid-zoom-track::-webkit-scrollbar {
+  display: none;
+}
+
+.grid-zoom-slide {
+  flex: 0 0 100%;
+
+  height: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+
+.grid-zoom-counter {
+  position: fixed;
+
+  top: calc(20px + env(safe-area-inset-top, 0px));
+  left: 50%;
+
+  transform: translateX(-50%);
+
+  font-family: var(--font-inter), sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+
+  letter-spacing: -0.01em;
+
+  color: #bbff00;
+
+  pointer-events: none;
+
+  z-index: 1;
+}
+
 .grid-item-revealed {
   opacity: 1;
   transform: translateY(0);
@@ -2676,9 +2771,13 @@ color: #bbff00;
 
 @media (max-width: 800px) {
   .grid-section {
-    padding: 110px 10px 60px;
+    padding: 60px 10px 60px;
 
     gap: 6px;
+  }
+
+  .reel-blur-bar {
+    height: 80px;
   }
 
   .grid-row {
@@ -2690,10 +2789,21 @@ color: #bbff00;
 
     cursor: pointer;
 
+    /* менший підйом, щоб на маленьких мініатюрах виглядало м'якше */
+    transform: translateY(40px);
+
+    /* опис transition тут має містити і opacity, інакше на мобільному вона стрибає */
+    transition:
+      opacity 0.7s ease,
+      transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* ефект натискання на картинці, щоб не конфліктував з анімацією появи */
+  .grid-img {
     transition: transform 0.15s ease;
   }
 
-  .grid-item:active {
+  .grid-item:active .grid-img {
     transform: scale(0.95);
   }
 }
@@ -3265,4 +3375,73 @@ html::-webkit-scrollbar {
   border-radius: 999px;
 
   background: #bbff00;
+}
+
+@media (max-width: 800px) {
+  /* без backdrop-filter: iOS не оновлює його без скролу */
+  .glass-tabs,
+  .glass-pill {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .glass-tab {
+    transition: none;
+  }
+
+  /* --- темна тема (motion) --- */
+  .glass-tabs {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+      0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+
+  .glass-pill {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.3),
+      rgba(255, 255, 255, 0.1) 45%,
+      rgba(255, 255, 255, 0.18)
+    );
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.55),
+      inset 0 -3px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* --- світла тема (graphic) --- */
+  .glass-tabs-light {
+    background: rgba(23, 23, 23, 0.06);
+    border: 1px solid rgba(23, 23, 23, 0.1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.7),
+      inset 0 -1px 0 rgba(23, 23, 23, 0.08),
+      0 10px 30px rgba(23, 23, 23, 0.12);
+  }
+
+  .glass-tabs-light .glass-pill {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0.8)
+    );
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 1),
+      inset 0 -3px 8px rgba(23, 23, 23, 0.12),
+      0 2px 6px rgba(23, 23, 23, 0.15);
+  }
+}
+@media (max-width: 800px) {
+  /* коли відкритий повноекранний перегляд — вінетка темніє разом з фоном */
+  body:has(.grid-zoom-overlay) .frame-vignette {
+    box-shadow: 0 0 0 9999px #050505;
+  }
+
+  body:has(.grid-zoom-overlay) .frame-safe-top,
+  body:has(.grid-zoom-overlay) .frame-safe-bottom {
+    background: #050505;
+  }
 }

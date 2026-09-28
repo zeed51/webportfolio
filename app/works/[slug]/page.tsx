@@ -1399,10 +1399,10 @@ function GridView({
     rows.push(images.slice(i, i + columns));
   }
 
-  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const [revealedRows, setRevealedRows] = useState<boolean[]>(() =>
-    rows.map(() => false)
-  );
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // індекс поста -> затримка появи (мс). Якщо ключа немає — пост ще прихований
+  const [revealed, setRevealed] = useState<Record<number, number>>({});
 
   const [isMobile, setIsMobile] = useState(false);
 
@@ -1413,40 +1413,79 @@ function GridView({
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  const [zoomedSrc, setZoomedSrc] = useState<string | null>(null);
+  // тільки заповнені слоти (без "SOON"), по них гортаємо в повноекранному режимі
+  const zoomable = images.filter((s): s is string => !!s);
+
+  const [zoomedIndex, setZoomedIndex] = useState<number | null>(null);
+  const zoomTrackRef = useRef<HTMLDivElement>(null);
+  const isZoomOpen = zoomedIndex !== null;
 
   const handleImageClick = (src: string | null) => {
     if (!isMobile || !src) return;
-    setZoomedSrc((current) => (current === src ? null : src));
+    setZoomedIndex(zoomable.indexOf(src));
   };
+
+  // при відкритті: одразу ставимо стрічку на натиснуту картинку
+  useEffect(() => {
+    if (!isZoomOpen) return;
+
+    const track = zoomTrackRef.current;
+    if (!track || zoomedIndex === null) return;
+
+    track.scrollLeft = zoomedIndex * track.clientWidth;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isZoomOpen]);
+
+  // поки відкрито перегляд — сторінка під ним не скролиться
+  useEffect(() => {
+    if (!isZoomOpen) return;
+
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isZoomOpen]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
+        // усі пости, що з'явилися в екрані в цей момент, у порядку сітки
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort(
+            (a, b) =>
+              Number((a.target as HTMLElement).dataset.itemIndex) -
+              Number((b.target as HTMLElement).dataset.itemIndex)
+          );
 
-          const index = Number((entry.target as HTMLElement).dataset.rowIndex);
+        if (visible.length === 0) return;
 
-          setRevealedRows((prev) => {
-            if (prev[index]) return prev;
-            const next = [...prev];
-            next[index] = true;
-            return next;
+        setRevealed((prev) => {
+          const next = { ...prev };
+
+          visible.forEach((entry, order) => {
+            const index = Number((entry.target as HTMLElement).dataset.itemIndex);
+            if (index in next) return;
+            // кожен наступний пост з'являється на один крок пізніше
+            next[index] = order * GRID_ITEM_STAGGER_MS;
           });
 
-          observer.unobserve(entry.target);
+          return next;
         });
+
+        visible.forEach((entry) => observer.unobserve(entry.target));
       },
       { threshold: GRID_ROW_THRESHOLD, rootMargin: GRID_ROOT_MARGIN }
     );
 
-    rowRefs.current.forEach((row) => {
-      if (row) observer.observe(row);
+    itemRefs.current.forEach((item) => {
+      if (item) observer.observe(item);
     });
 
     return () => observer.disconnect();
-  }, [rows.length]);
+  }, [images.length]);
 
   return (
     <section className="grid-section">
@@ -1454,20 +1493,22 @@ function GridView({
         <div
           key={rowIndex}
           className="grid-row"
-          data-row-index={rowIndex}
-          ref={(el) => {
-            rowRefs.current[rowIndex] = el;
-          }}
           style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
         >
           {row.map((src, colIndex) => (
             <div
               key={colIndex}
+              data-item-index={rowIndex * columns + colIndex}
+              ref={(el) => {
+                itemRefs.current[rowIndex * columns + colIndex] = el;
+              }}
               className={`grid-item ${
-                revealedRows[rowIndex] ? "grid-item-revealed" : ""
+                rowIndex * columns + colIndex in revealed
+                  ? "grid-item-revealed"
+                  : ""
               }`}
               style={{
-                transitionDelay: `${colIndex * GRID_ITEM_STAGGER_MS}ms`,
+                transitionDelay: `${revealed[rowIndex * columns + colIndex] ?? 0}ms`,
                 aspectRatio: aspect,
               }}
               onClick={() => handleImageClick(src)}
@@ -1499,14 +1540,32 @@ function GridView({
         </div>
       ))}
 
-      {zoomedSrc && (
+      {isZoomOpen && (
         <div
           className="grid-zoom-overlay"
-          onClick={() => setZoomedSrc(null)}
+          onClick={() => setZoomedIndex(null)}
         >
-          <div className="grid-zoom-frame" style={{ aspectRatio: aspect }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="grid-zoom-img" src={zoomedSrc} alt="" />
+          <div className="grid-zoom-counter">
+            {(zoomedIndex ?? 0) + 1} / {zoomable.length}
+          </div>
+
+          <div
+            className="grid-zoom-track"
+            ref={zoomTrackRef}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              const index = Math.round(el.scrollLeft / el.clientWidth);
+              setZoomedIndex((cur) => (cur === index ? cur : index));
+            }}
+          >
+            {zoomable.map((src) => (
+              <div className="grid-zoom-slide" key={src}>
+                <div className="grid-zoom-frame" style={{ aspectRatio: aspect }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img className="grid-zoom-img" src={src} alt="" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -1677,6 +1736,10 @@ export default function ReelPage() {
 
   return (
     <main className={`${inter.variable} reel-page`}>
+      {work.layout === "grid" && (
+        <div className="reel-blur-bar" aria-hidden="true" />
+      )}
+
       <header className="reel-header">
         <div className="reel-header-left">
           <Link href="/" className="reel-logo">
@@ -1701,7 +1764,7 @@ export default function ReelPage() {
           </button>
         </div>
 
-        <span className="reel-title">{title}</span>
+        <span className={`reel-title reel-title-${params.slug}`}>{title}</span>
       </header>
 
       {work.layout !== "poster" && work.layout !== "grid" && (

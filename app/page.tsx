@@ -38,14 +38,14 @@ const CONTACT_TEXT = {
   eng: {
     title: "LET’S WORK TOGETHER",
     subtitle: "Available for freelance. Ukraine / Worldwide.",
-    email: "email: zeedchrist@gmail.com",
-    telegram: "telegram: @yaqrutoy",
+    emailLabel: "EMAIL",
+    telegramLabel: "TELEGRAM",
   },
   ua: {
     title: "ПРАЦЮЙМО РАЗОМ",
     subtitle: "Доступний для фрилансу. Україна / Весь світ.",
-    email: "пошта: zeedchrist@gmail.com",
-    telegram: "телеграм: @yaqrutoy",
+    emailLabel: "ПОШТА",
+    telegramLabel: "ТЕЛЕГРАМ",
   },
 };
 
@@ -156,6 +156,7 @@ useEffect(() => {
   const [pill, setPill] = useState({ left: 0, width: 0 });
   const [squish, setSquish] = useState(false);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const glassTabsRef = useRef<HTMLDivElement>(null);
 
 
     const videoSectionRef = useRef<HTMLElement>(null);
@@ -635,7 +636,10 @@ const update = () => {
           />
         )}
 
-        <div className="glass-tabs">
+        <div
+          ref={glassTabsRef}
+          className={`glass-tabs ${workTab === "graphic" ? "glass-tabs-light" : ""}`}
+        >
           <span
             className={`glass-pill ${squish ? "glass-pill-squish" : ""}`}
             style={{ left: pill.left, width: pill.width }}
@@ -719,11 +723,22 @@ const update = () => {
         </p>
 
         <div className="contact-links">
-   <a href="mailto:zeedchrist@gmail.com">{CONTACT_TEXT[language].email}</a>
-  <a href="https://t.me/yaqrutoy" target="_blank" rel="noopener noreferrer">
-    {CONTACT_TEXT[language].telegram}
-  </a>
-</div>
+          <a href="mailto:zeedchrist@gmail.com" className="contact-pill">
+            <span className="contact-pill-label">{CONTACT_TEXT[language].emailLabel}</span>
+            <span className="contact-pill-value">zeedchrist@gmail.com</span>
+            <svg className="contact-pill-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
+
+          <a href="https://t.me/yaqrutoy" target="_blank" rel="noopener noreferrer" className="contact-pill">
+            <span className="contact-pill-label">{CONTACT_TEXT[language].telegramLabel}</span>
+            <span className="contact-pill-value">@yaqrutoy</span>
+            <svg className="contact-pill-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
+        </div>
 
         <div className="contact-ihor" aria-hidden="true">
           IHOR

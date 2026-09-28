@@ -18,7 +18,6 @@ export const WORK_REELS: Record<string, WorkReels> = {
       "/videos/reels/short-video-editing-1-compressed.mp4",
       "/videos/reels/short-video-editing-2.mp4",
       "/videos/reels/short-video-editing-3-compressed.mp4",
-      "/videos/reels/short-video-editing-4.mp4",
     ],
   },
   "youtube-teaser": {
@@ -27,9 +26,6 @@ export const WORK_REELS: Record<string, WorkReels> = {
     layout: "featured",
     videos: [
       "/videos/youtube teaser/youtube-teaser-1.mp4",
-      null,
-      null,
-      null,
       null,
     ],
   },

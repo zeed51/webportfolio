@@ -32,7 +32,60 @@ const ACTIVE_THRESHOLD = 0.5;
 const MOBILE_SCALE_MAX = 1;
 const MOBILE_SCALE_MIN = 0.7;
 
-const SWIPE_HINT_DURATION_MS = 4500;
+/* ===== DOTS: положення крапок відносно нижнього краю відео ===== */
+
+// відступ від нижнього краю відео до крапок (px)
+const DOTS_GAP_PX = 18;
+
+// у скільки разів візуально зменшене відео в центрі (keyframes у CSS):
+// reel-scale-mobile → 0.9, featured-scale-mobile → 1
+const CAROUSEL_DOTS_VIDEO_SCALE = 0.9;
+const FEATURED_DOTS_VIDEO_SCALE = 1;
+
+// мінімальний відступ крапок від низу екрана (px)
+const DOTS_BOTTOM_SAFE_PX = 16;
+
+function useDotsTop(
+  enabled: boolean,
+  slotRefs: React.MutableRefObject<(HTMLDivElement | null)[]>,
+  videoScale: number
+) {
+  const [top, setTop] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const measure = () => {
+      const slot = slotRefs.current.find(Boolean);
+      if (!slot) return;
+
+      // центр слота по вертикалі не змінюється від scale-анімації,
+      // offsetHeight — висота без transform, тому низ рахуємо від центру
+      const rect = slot.getBoundingClientRect();
+      const centerY = rect.top + rect.height / 2;
+      const videoBottom = centerY + (slot.offsetHeight * videoScale) / 2;
+
+      const maxTop = window.innerHeight - DOTS_BOTTOM_SAFE_PX;
+      setTop(Math.round(Math.min(videoBottom + DOTS_GAP_PX, maxTop)));
+    };
+
+    measure();
+    const t = setTimeout(measure, 150);
+
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, [enabled, slotRefs, videoScale]);
+
+  return top;
+}
 
 function CarouselView({
   videos,
@@ -49,19 +102,24 @@ function CarouselView({
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
-  const [isMobile, setIsMobile] = useState(false);
-  const [swipeHintVisible, setSwipeHintVisible] = useState(true);
-   const [mobileActiveIndex, setMobileActiveIndex] = useState(0);
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
+  const [mobileActiveIndex, setMobileActiveIndex] = useState(0);
   const mobileTrackRef = useRef<HTMLElement>(null);
   const mobileSlotRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  const dotsTop = useDotsTop(
+    isMobile === true,
+    mobileSlotRefs,
+    CAROUSEL_DOTS_VIDEO_SCALE
+  );
+
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth <= 800);
+    const mq = window.matchMedia("(max-width: 800px)");
+    const apply = () => setIsMobile(mq.matches);
 
-    checkMobile();
-
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
   }, []);
 
   // ручна пауза користувачем: доки індекс тут — автоплей його не чіпає
@@ -106,25 +164,113 @@ function CarouselView({
     }
   };
 
-  // підказка "swipe": ховається через 5с або при першому свайпі
+  // активна крапка = відео, найближче до центру екрана
   useEffect(() => {
-    if (!isMobile) return;
+    if (isMobile !== true) return;
 
     const container = trackRef.current;
     if (!container) return;
 
-    const timer = setTimeout(() => setSwipeHintVisible(false), SWIPE_HINT_DURATION_MS);
+    const updateActive = () => {
+      const center = container.scrollLeft + container.clientWidth / 2;
+      let closest = 0;
+      let minDist = Infinity;
 
-    const handleScroll = () => {
-      setSwipeHintVisible(false);
+      mobileSlotRefs.current.forEach((slot, i) => {
+        if (!slot) return;
+        const slotCenter = slot.offsetLeft + slot.offsetWidth / 2;
+        const dist = Math.abs(slotCenter - center);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = i;
+        }
+      });
+
+      setMobileActiveIndex(closest);
     };
 
-    container.addEventListener("scroll", handleScroll, { passive: true, once: true });
+    updateActive();
+    container.addEventListener("scroll", updateActive, { passive: true });
 
-    return () => {
-      clearTimeout(timer);
-      container.removeEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", updateActive);
+  }, [isMobile, videos]);
+
+  // при вході: короткий "підглядаючий" скрол вліво і назад
+  useEffect(() => {
+    if (isMobile !== true) return;
+
+    const container = trackRef.current;
+    if (!container) return;
+
+    const slot = container.querySelector<HTMLElement>(".reel-slot-mobile");
+    if (!slot) return;
+
+    const PEEK_FRACTION = 0.35; // яку частку рілзу прокрутити
+    const DELAY_MS = 700;       // пауза перед стартом
+    const MOVE_MS = 700;        // тривалість руху в один бік
+    const HOLD_MS = 150;        // зупинка в крайній точці
+
+    const distance = slot.offsetWidth * PEEK_FRACTION;
+
+    let cancelled = false;
+    let rafId = 0;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    const ease = (t: number) =>
+      t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+    const animate = (from: number, to: number, done: () => void) => {
+      const start = performance.now();
+
+      const step = (now: number) => {
+        if (cancelled) return;
+
+        const t = Math.min(1, (now - start) / MOVE_MS);
+        container.scrollLeft = from + (to - from) * ease(t);
+
+        if (t < 1) {
+          rafId = requestAnimationFrame(step);
+        } else {
+          done();
+        }
+      };
+
+      rafId = requestAnimationFrame(step);
     };
+
+    const finish = () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      timers.forEach(clearTimeout);
+      container.style.scrollSnapType = "";
+      container.removeEventListener("touchstart", finish);
+    };
+
+    // якщо людина торкнулась екрана — одразу зупиняємо анімацію
+    container.addEventListener("touchstart", finish, { passive: true });
+
+    timers.push(
+      setTimeout(() => {
+        if (cancelled) return;
+
+        // на час анімації вимикаємо snap, інакше він "тягне" назад
+        container.style.scrollSnapType = "none";
+
+        animate(0, distance, () => {
+          timers.push(
+            setTimeout(() => {
+              if (cancelled) return;
+              animate(distance, 0, () => {
+                container.style.scrollSnapType = "";
+                container.removeEventListener("touchstart", finish);
+              });
+            }, HOLD_MS)
+          );
+        });
+      }, DELAY_MS)
+    );
+
+    return finish;
   }, [isMobile]);
 
   useEffect(() => {
@@ -137,6 +283,8 @@ function CarouselView({
   }, [muted, volume]);
 
   useEffect(() => {
+    if (isMobile !== false) return;
+
     const track = trackRef.current;
     if (!track) return;
 
@@ -221,17 +369,15 @@ slot.onclick = () => {
       });
     };
 
-    if (!isMobile) {
-      update();
+    update();
 
-      window.addEventListener("scroll", update);
-      window.addEventListener("resize", update);
+    window.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
 
-      return () => {
-        window.removeEventListener("scroll", update);
-        window.removeEventListener("resize", update);
-      };
-    }
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
   }, [videos, isMobile]);
 
 
@@ -286,6 +432,8 @@ slot.onclick = () => {
     return () => observer.disconnect();
   }, [isMobile, videos, onAutoplayBlocked]);
 
+  if (isMobile === null) return null;
+
   if (isMobile) {
     return (
       <>
@@ -295,7 +443,7 @@ slot.onclick = () => {
               key={src}
               className="reel-slot-mobile"
               ref={(el) => {
-                slotRefs.current[i] = el;
+                mobileSlotRefs.current[i] = el;
               }}
               onClick={() => togglePlay(i, videoRefs.current[i])}
             >
@@ -346,31 +494,22 @@ slot.onclick = () => {
         </section>
 
         <div
-          className={`swipe-hint ${swipeHintVisible ? "" : "swipe-hint-hidden"}`}
+          className="reel-dots"
           aria-hidden="true"
+          style={{
+            top: dotsTop ?? undefined,
+            bottom: "auto",
+            opacity: dotsTop === null ? 0 : 1,
+          }}
         >
-         <span className="swipe-chevron swipe-chevron-1">
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M15 4L5 12L15 20"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-</span>
-<span className="swipe-chevron swipe-chevron-2">
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M15 4L5 12L15 20"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-</span>
+          {videos.map((_, i) => (
+            <span
+              key={i}
+              className={`reel-dot ${
+                i === mobileActiveIndex ? "reel-dot-active" : ""
+              }`}
+            />
+          ))}
         </div>
       </>
     );
@@ -473,30 +612,124 @@ function FeaturedView({
   const [flash, setFlash] = useState<{ index: number; type: "play" | "pause" } | null>(null);
 
   const [isMobile, setIsMobile] = useState(false);
-  const [swipeHintVisible, setSwipeHintVisible] = useState(true);
+  const [mobileActiveIndex, setMobileActiveIndex] = useState(0);
+  const mobileSlotRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const dotsTop = useDotsTop(
+    isMobile,
+    mobileSlotRefs,
+    FEATURED_DOTS_VIDEO_SCALE
+  );
 
   useEffect(() => {
     setIsMobile(window.innerWidth <= 800);
   }, []);
 
+  // активна крапка = відео, найближче до центру екрана
   useEffect(() => {
     if (!isMobile) return;
 
     const container = trackRef.current;
     if (!container) return;
 
-    const timer = setTimeout(() => setSwipeHintVisible(false), SWIPE_HINT_DURATION_MS);
+    const updateActive = () => {
+      const center = container.scrollLeft + container.clientWidth / 2;
+      let closest = 0;
+      let minDist = Infinity;
 
-    const handleScroll = () => {
-      setSwipeHintVisible(false);
+      mobileSlotRefs.current.forEach((slot, i) => {
+        if (!slot) return;
+        const slotCenter = slot.offsetLeft + slot.offsetWidth / 2;
+        const dist = Math.abs(slotCenter - center);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = i;
+        }
+      });
+
+      setMobileActiveIndex(closest);
     };
 
-    container.addEventListener("scroll", handleScroll, { passive: true, once: true });
+    updateActive();
+    container.addEventListener("scroll", updateActive, { passive: true });
 
-    return () => {
-      clearTimeout(timer);
-      container.removeEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", updateActive);
+  }, [isMobile, videos]);
+
+  // при вході: короткий "підглядаючий" скрол вліво і назад
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const container = trackRef.current;
+    if (!container) return;
+
+    const slot = container.querySelector<HTMLElement>(".featured-slot-mobile");
+    if (!slot) return;
+
+    const PEEK_FRACTION = 0.35;
+    const DELAY_MS = 700;
+    const MOVE_MS = 700;
+    const HOLD_MS = 150;
+
+    const distance = slot.offsetWidth * PEEK_FRACTION;
+
+    let cancelled = false;
+    let rafId = 0;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    const ease = (t: number) =>
+      t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+    const animate = (from: number, to: number, done: () => void) => {
+      const start = performance.now();
+
+      const step = (now: number) => {
+        if (cancelled) return;
+
+        const t = Math.min(1, (now - start) / MOVE_MS);
+        container.scrollLeft = from + (to - from) * ease(t);
+
+        if (t < 1) {
+          rafId = requestAnimationFrame(step);
+        } else {
+          done();
+        }
+      };
+
+      rafId = requestAnimationFrame(step);
     };
+
+    const finish = () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      timers.forEach(clearTimeout);
+      container.style.scrollSnapType = "";
+      container.removeEventListener("touchstart", finish);
+    };
+
+    container.addEventListener("touchstart", finish, { passive: true });
+
+    timers.push(
+      setTimeout(() => {
+        if (cancelled) return;
+
+        container.style.scrollSnapType = "none";
+
+        animate(0, distance, () => {
+          timers.push(
+            setTimeout(() => {
+              if (cancelled) return;
+              animate(distance, 0, () => {
+                container.style.scrollSnapType = "";
+                container.removeEventListener("touchstart", finish);
+              });
+            }, HOLD_MS)
+          );
+        });
+      }, DELAY_MS)
+    );
+
+    return finish;
   }, [isMobile]);
 
   useEffect(() => {
@@ -701,6 +934,9 @@ function FeaturedView({
             <div
               key={i}
               className="featured-slot-mobile"
+              ref={(el) => {
+                mobileSlotRefs.current[i] = el;
+              }}
               onClick={() => togglePlay(i, videoRefs.current[i])}
             >
               {src ? (
@@ -756,31 +992,22 @@ function FeaturedView({
         </section>
 
         <div
-          className={`swipe-hint ${swipeHintVisible ? "" : "swipe-hint-hidden"}`}
+          className="reel-dots"
           aria-hidden="true"
+          style={{
+            top: dotsTop ?? undefined,
+            bottom: "auto",
+            opacity: dotsTop === null ? 0 : 1,
+          }}
         >
-        <span className="swipe-chevron swipe-chevron-1">
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M15 4L5 12L15 20"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-</span>
-<span className="swipe-chevron swipe-chevron-2">
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path
-      d="M15 4L5 12L15 20"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-</span>
+          {videos.map((_, i) => (
+            <span
+              key={i}
+              className={`reel-dot ${
+                i === mobileActiveIndex ? "reel-dot-active" : ""
+              }`}
+            />
+          ))}
         </div>
       </>
     );

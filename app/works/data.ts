@@ -17,7 +17,8 @@ export const WORK_REELS: Record<string, WorkReels> = {
     videos: [
       "/videos/reels/short-video-editing-1-small.mp4",
       "/videos/reels/short-video-editing-2-small.mp4",
-      "/videos/reels/short-video-editing-3--small.mp4",
+      "/videos/reels/short-video-editing-3-small.mp4",
+      "/videos/reels/short-video-editing-4-small.mp4",
     ],
   },
   "youtube-teaser": {
@@ -52,6 +53,8 @@ export const WORK_REELS: Record<string, WorkReels> = {
       "/images/posters/poster-7.webp",
       "/images/posters/poster-8.webp",
       "/images/posters/poster-9.webp",
+      "/images/posters/poster-10.webp",
+      
     ],
   },
     "social-media-design": {
@@ -89,9 +92,6 @@ export const WORK_REELS: Record<string, WorkReels> = {
       "/images/thumbnails/thumbnail-8.webp",
       "/images/thumbnails/thumbnail-9.webp",
       "/images/thumbnails/thumbnail-10.webp",
-      "/images/thumbnails/thumbnail-11.webp",
-      "/images/thumbnails/thumbnail-12.webp",
-      "/images/thumbnails/thumbnail-13.webp",
     ],
   },
     "amazon-design": {
